@@ -3,13 +3,14 @@
 # [y]   training data -- y with m column
 # [a]   Lagrange multiplier -- alpha with m column
 
+import time
 from random import *
 from numpy import *
 from itertools import islice
 
 # const value
 DIM = 28*28
-NUM = 1000
+NUM = 5000
 
 
 class optStruct:
@@ -45,7 +46,7 @@ def loadData(fName, RowStart, RowEnd):
 		y.append(int(data[0]))
 		line = []
 		for i in range(1, DIM+1):
-			line.append(float(data[i]))
+			line.append(float(data[i])/255.0)
 		x.append(line)
 	return x, y
 
@@ -71,13 +72,12 @@ def kernelGauss(X, A, k):
 def getEk(param, k):
 	'''
 	calculate prediction error
-	( Ei = [Sum aj*yj*K(xj,xi)+b)] - yi )		7.105
+	( Ei = [Sum aj*yj*K(xj,xi)+b)] - yi )
 	@param1 : operation structure
 	@param2 : column number
 	'''
-	Ek = float(multiply(param.a, param.y).T*\
-			(param.x*param.x[k,:].T)) + param.b
-	Ek -= float(param.y[k])
+	Ek = float(multiply(param.a, param.y).T*param.K[:,k] + param.b)
+	Ek -= float(param.y[k]) # 7.105
 	return Ek
 
 
@@ -146,6 +146,8 @@ def innerL(i, param):
 	@param1 : the first alpha index
 	@param2 : operation structure
 	'''
+	L = 0.0
+	H = 0.0
 	Ei = getEk(param, i)
 	if ( (param.y[i] * Ei < -param.t) and (param.a[i] < param.C)) or \
 		((param.y[i] * Ei > param.t) and (param.a[i] > 0) ): # outer loop index is right?
@@ -158,17 +160,21 @@ def innerL(i, param):
 		else: # Graph 7.8 right
 			L = max(0, param.a[j] + param.a[i] - param.C)
 			H = min(param.C, param.a[j] + param.a[i])
-		if L==H: print("L==H"); return 0 # can not change the alpha pair
+		if L == H:
+			#print("L == H")
+			return 0 # can not change the alpha pair
 		eta = param.K[i,i] + param.K[j,j] - 2.0 * param.K[i,j] # 7.107
-		if eta <= 0: print("eta<=0"); return 0
+		if eta <= 0:
+			#print("eta <= 0")
+			return 0
 		param.a[j] += param.y[j] * (Ei - Ej) / eta # 7.106
 		param.a[j] = setAlpha(param.a[j],H,L)
 		setEk(param, j)
 		if (abs(param.a[j] - ajOld) < 0.00001): # the moving of j is too short
-			print("j isn't moving enough. aj = %f" % param.a[j])
+			#print("alphaj isn't moving enough. a%d = %f" % (j, param.a[j]))
 			return 0
 		else : 
-			param.a[i] += param.y[j]*param.y[i]*(ajOld - param.a[j])
+			param.a[i] += param.y[j]*param.y[i]*(ajOld - param.a[j]) # 7.109
 			setEk(param, i)
 			b1 = param.b - Ei - param.y[i]*(param.a[i]-aiOld)*param.K[i,i] - \
 					param.y[j]*(param.a[j]-ajOld)*param.K[i,j] # 7.115
@@ -178,9 +184,10 @@ def innerL(i, param):
 			if (0 < param.a[i]) and (param.a[i] < param.C): param.b = b1
 			elif (0 < param.a[j]) and (param.a[j] < param.C): param.b = b2
 			else: param.b = (b1 + b2) / 2.0
-			print("alpha pair is updated! ai = %f, aj = %f" % (param.a[i], param.a[j]))
+			#print("alpha pair is updated! i=%d,j=%d,Ei=%f,Ej=%f,ai=%f,aj=%f,L=%f,H=%f" % (i, j, Ei, Ej, param.a[i], param.a[j], L, H))
 			return 1
 	else:
+		#print("the Ei is bigger than tolerance. E%d = %f" % (i, Ei))
 		return 0
 
 
@@ -194,6 +201,15 @@ def PlattSMO(x, y, C, t, maxIter, k=1.3):
 	@param5 : falling step of gauss function (k = sqrt(2)*sigma)
 	'''
 	param = optStruct(x, y, C, t, k)
+	#print("x =")
+	#print(param.x)
+	#print("K =")
+	#print(param.K)
+	#print("C = %d" % param.C)
+	#print("t = %d" % param.t)
+	#print("m = %d" % param.m)
+	#print("")
+	print ("Data initlization completed. (time : %s)" % time.ctime())
 	cnt = 0
 	cNum = 0 # alpha pair changed number of times
 	isOutside = True
@@ -201,32 +217,29 @@ def PlattSMO(x, y, C, t, maxIter, k=1.3):
 		cNum = 0
 		if isOutside: # the alpha of sample data is out of range (0, C)
 			for i in range(param.m):
-				#cNum += innerL(i,param)
-				if (innerL(i,param)):
+				if (innerL(i,param) == 1):
 					cNum += 1
-					print("out (0, C), iter: %d i:%d, alpha pairs changed %d times" \
-							% (cnt,i,cNum))
+					#print("out (0, C), iter: %d i:%d, alpha pairs changed %d times" % (cnt,i,cNum))
 			cnt += 1
 		else: # the alpha of sample data is in range (0, C)
 			insideSet = nonzero((param.a.A > 0) * (param.a.A < C))[0]
 			for i in insideSet:
-				#cNum += innerL(i,param)
-				if (innerL(i,param)):
+				if (innerL(i,param) == 1):
 					cNum += 1
-					print("in  (0, C), iter: %d i:%d, alpha pairs changed %d times" \
-							% (cnt,i,cNum))
+					#print("in  (0, C), iter: %d i:%d, alpha pairs changed %d times" % (cnt,i,cNum))
 			cnt += 1
 		if isOutside : isOutside = False
 		elif (cNum == 0): isOutside = True
-		print("iteration number: %d" % cnt)
+		print ("Iteration number is %d. (time : %s)" % (cnt, time.ctime()))
 	return param.b, param.a
 
 
-def testRbf(k = 1.3):
+def testRbf(C=0.6, t=0.00001, k=2.3):
 	'''
 	test platt SMO method with gauss kernel
-	@param1 : falling step of gauss function (k = sqrt(2)*sigma)
 	'''
+	print ("SVM is starting. Training data number is %d. [C=%.2f, k=%.2f] (time : %s)" % (NUM, C, k, time.ctime()))
+	
 	# load mnist data
 	data,label = loadData('16.MNIST.train.csv', 1, NUM+1)
 	for i in range(0, NUM) :
@@ -236,20 +249,20 @@ def testRbf(k = 1.3):
 	y = mat(label).transpose()
 	
 	# execute platt SMO method
-	b,a = PlattSMO(x, y, 200, 0.0001, 100, k) # C=200 important
+	b,a = PlattSMO(x, y, C, t, 1000, k) # C=200 k=1.3 is important!
 	
 	# calculate the error rate of training data
 	sv = nonzero(a.A>0)[0]
 	xSV = x[sv] # get matrix of only support vectors (alpha>0)
 	ySV = y[sv] # get label of only support vectors (alpha>0)
-	print("there are %d support vectors" % shape(ySV)[0])
+	print ("There are %d support vectors." % shape(ySV)[0])
 	m,n = shape(x) # this m is number of support vector
 	errCnt = 0
 	for i in range(m):
 		kernel  = kernelGauss(xSV, x[i,:], k)
 		predict = kernel.T * multiply(ySV, a[sv]) + b # Accumulation is completed once by matrix operation
 		if sign(predict) != sign(label[i]) : errCnt += 1
-	print("the training error rate is: %f" % (float(errCnt)/m))
+	print ("Training error rate is %.2f%%. (time : %s)" % (float(errCnt)/m*100.0, time.ctime()))
 	
 	# calculate the error rate of test data (last 5000 data of mnist)
 	data,label = loadData('16.MNIST.train.csv', 35001, 40001)
@@ -264,7 +277,7 @@ def testRbf(k = 1.3):
 		kernel  = kernelGauss(xSV, x[i,:], k)
 		predict = kernel.T * multiply(ySV, a[sv]) + b
 		if sign(predict) != sign(label[i]) : errCnt += 1
-	print("the test error rate is: %f" % (float(errCnt)/m))
+	print ("Test error rate is %.2f%%. (time : %s)" % (float(errCnt)/m*100.0, time.ctime()))
 
 	
 if __name__ == '__main__':
