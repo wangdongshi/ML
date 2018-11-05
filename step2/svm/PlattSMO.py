@@ -64,7 +64,7 @@ def loadDataSet(fName, startLine, endline):
 		labelMat.append(int(lineArr[0]))
 		dataLine = []
 		for i in range(1, DIM+1):
-			dataLine.append(float(lineArr[i])/255.0)
+			dataLine.append(float(lineArr[i]))
 		dataMat.append(dataLine)
 	return dataMat, labelMat
 
@@ -149,7 +149,7 @@ def testRbf(k1=1.3):
 	for i in range(0, NUM) :
 		if labelArr[i] == 0 : labelArr[i] = 1
 		else : labelArr[i] = -1
-	b,alphas = PlattSMO(dataArr, labelArr, 0.6, 0.0001, 100, ('rbf', k1)) #C=200 important
+	b,alphas = PlattSMO(dataArr, labelArr, 1, 0.0001, 100, ('rbf', k1)) #C=200 important
 	datMat=mat(dataArr); labelMat = mat(labelArr).transpose()
 	svInd=nonzero(alphas.A>0)[0]
 	sVs=datMat[svInd] #get matrix of only support vectors
@@ -162,6 +162,8 @@ def testRbf(k1=1.3):
 		predict=kernelEval.T * multiply(labelSV,alphas[svInd]) + b
 		if sign(predict)!=sign(labelArr[i]): errorCount += 1
 	print("the training error rate is: %f" % (float(errorCount)/m))
+	return
+
 	# test the last 5000 data
 	dataArr,labelArr = loadDataSet('16.MNIST.train.csv', 35001, 40001)
 	for i in range(0, 5000) :
