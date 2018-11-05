@@ -4,7 +4,7 @@ from numpy import *
 from itertools import islice
 
 DIM = 28*28
-NUM = 1000
+NUM = 2000
 
 def loadDataSet(fName, lineNum):
 	dataMat = []
