@@ -2,7 +2,7 @@
 # [x]   training data -- x with m x n dimension
 # [y]   training data -- y with m column
 # [a]   Lagrange multiplier -- alpha with m column
-
+import pdb
 import time
 from random import *
 from numpy import *
@@ -151,7 +151,9 @@ def innerL(i, param):
 	Ei = getEk(param, i)
 	if ( (param.y[i] * Ei < -param.t) and (param.a[i] < param.C)) or \
 		((param.y[i] * Ei > param.t) and (param.a[i] > 0) ): # outer loop index is right?
-		j,Ej = selectJ(param, i, Ei)
+		#j,Ej = selectJ(param, i, Ei)
+		j = selectJRand(i, param.m) # for test
+		Ej = getEk(param, j) # for test
 		aiOld = param.a[i].copy()
 		ajOld = param.a[j].copy()
 		if (param.y[i] != param.y[j]): # Graph 7.8 left
@@ -231,7 +233,7 @@ def PlattSMO(x, y, C, t, maxIter, k=1.3):
 		if isOutside : isOutside = False
 		elif (cNum == 0): isOutside = True
 		print ("Iteration number is %d. (time : %s)" % (cnt, time.ctime()))
-	print(param.a)
+	#print(param.a)
 	return param.b, param.a
 
 
@@ -311,12 +313,16 @@ def twoClassify(target=0, begin=1, C=0.6, t=0.00001, k=2.3):
 	errCnt = 0
 	x = mat(data)
 	y = mat(label).transpose()
+	sv = nonzero(a.A>0)[0]
+	xSV = x[sv] # get matrix of only support vectors (alpha>0)
+	ySV = y[sv] # get label of only support vectors (alpha>0)
+	print ("There are %d support vectors." % shape(ySV)[0])
 	m,n = shape(x)
 	for i in range(m):
 		kernel  = kernelGauss(xSV, x[i,:], k)
 		predict = kernel.T * multiply(ySV, a[sv]) + b
 		if sign(predict) != sign(label[i]) : errCnt += 1
-	p = 1.0 - float(errCnt) / m * 100.0
+	p = (1.0 - float(errCnt) / m) * 100.0
 	print ("Confidence rate is %.2f%%. (time : %s)" % (p, time.ctime()))
 
 	return a, x, b, p
@@ -345,7 +351,8 @@ def multiClassify(C=0.6, t=0.00001, k=2.3):
 	
 	# make 10 two-classification
 	for i in range(10):
-		sv[i] = supportVector(twoClassify(i, 1, C, t, k))
+		a, x, b, p = twoClassify(i, 1, C, t, k)
+		sv[i] = supportVector(a, x, b, p)
 
 	return sv
 
@@ -377,12 +384,17 @@ def testTwoClass(C=0.6, t=0.00001, k=2.3):
 	for i in range(m):
 		kernel  = kernelGauss(xSV, x[i,:], k)
 		predict = kernel.T * multiply(ySV, a[sv]) + b # Accumulation is completed once by matrix operation
-		if sign(predict) != sign(label[i]) : errCnt += 1
+		if sign(predict) == sign(label[i]) :
+			print("[%d] predicted : %f, real label : %d. (OK)" % (1+i, predict, label[i]))
+		else :
+			print("[%d] predicted : %f, real label : %d. (NG)" % (1+i, predict, label[i]))
+			errCnt += 1
 	print ("Training error rate is %.2f%%. (time : %s)" % (float(errCnt)/m*100.0, time.ctime()))
+	pdb.set_trace()
 	
 	# calculate the error rate of test data (last 5000 data of mnist)
-	data,label = loadData('16.MNIST.train.csv', 35001, 40001)
-	for i in range(0, 5000) :
+	data,label = loadData('16.MNIST.train.csv', 35001, 37001)
+	for i in range(0, 2000) :
 		if label[i] == 0 : label[i] = 1
 		else : label[i] = -1
 	errCnt = 0
@@ -392,7 +404,11 @@ def testTwoClass(C=0.6, t=0.00001, k=2.3):
 	for i in range(m):
 		kernel  = kernelGauss(xSV, x[i,:], k)
 		predict = kernel.T * multiply(ySV, a[sv]) + b
-		if sign(predict) != sign(label[i]) : errCnt += 1
+		if sign(predict) == sign(label[i]) :
+			print("[%d] predicted : %f, real label : %d. (OK)" % (35001+i, predict, label[i]))
+		else :
+			print("[%d] predicted : %f, real label : %d. (NG)" % (35001+i, predict, label[i]))
+			errCnt += 1
 	print ("Test error rate is %.2f%%. (time : %s)" % (float(errCnt)/m*100.0, time.ctime()))
 
 
@@ -415,16 +431,21 @@ def testMultiClass(C=0.6, t=0.00001, k=2.3):
 			s = nonzero(sv[j].a.A>0)[0]
 			xSV = x[s] # get matrix of only support vectors (alpha>0)
 			ySV = y[s] # get label of only support vectors (alpha>0)
-			print ("There are %d support vectors." % shape(ySV)[0])
 			errCnt = 0
 			kernel  = kernelGauss(xSV, x[i,:], k)
-			predict = kernel.T * multiply(ySV, sv[j].a[s]) + b # Accumulation is completed once by matrix operation
+			predict = kernel.T * multiply(ySV, sv[j].a[s]) + sv[j].b # Accumulation is completed once by matrix operation
 			if (sign(predict) and sv[j].p > maxP):
 				maxP = sv[j].p
 				kind = j
-		if kind != label[i] : errCnt += 1
+		if kind == label[i] :
+			print ("[%d] predicted digit = %d, real label %d. (OK)" % (35001+i, kind, label[i]))
+		else :
+			print ("[%d] predicted digit = %d, real label %d. (NG)" % (35001+i, kind, label[i]))
+			errCnt += 1
 	print ("Test error rate is %.2f%%. (time : %s)" % (float(errCnt)/m*100.0, time.ctime()))
 
 
 if __name__ == '__main__':
-	testRbf()
+	testTwoClass()
+	#testMultiClass()
+	
