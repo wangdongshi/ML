@@ -1,183 +1,430 @@
-#import numpy as np
+# For the sake of simplicity, the meaning of variables' names is as follows:
+# [x]   training data -- x with m x n dimension
+# [y]   training data -- y with m column
+# [a]   Lagrange multiplier -- alpha with m column
+
+import time
 from random import *
 from numpy import *
 from itertools import islice
 
+# const value
 DIM = 28*28
 NUM = 1000
 
+
 class optStruct:
-	def __init__(self,dataMatIn,classLabels,C,toler, kTup):
-		self.X=dataMatIn
-		self.labelMat=classLabels
-		self.C=C
-		self.tol=toler
-		self.m=shape(dataMatIn)[0]
-		self.alphas=mat(zeros((self.m,1)))
-		self.b=0
-		self.Cache=mat(zeros((self.m,2)))
+	'''
+	prediction error estimation structure
+	'''
+	def __init__(self, x, y, C, t, k):
+		self.x = x
+		self.y = y
+		self.C = C
+		self.t = t
+		self.m = shape(x)[0]
+		self.a = mat(zeros((self.m,1)))
+		self.b = 0
+		self.Cache = mat(zeros((self.m,2)))
 		self.K = mat(zeros((self.m,self.m)))
 		for i in range(self.m):
-			self.K[:,i] = kernelTrans(self.X, self.X[i,:], kTup)
+			self.K[:,i] = kernelGauss(self.x, self.x[i,:], k)
 
-#格式化计算误差的函数，方便多次调用
-def calcEk(oS, k):
-	'''计算预测误差'''
-	fXk = float(multiply(oS.alphas,oS.labelMat).T*oS.K[:,k] + oS.b)
-	Ek = fXk - float(oS.labelMat[k])
-	return Ek
 
-#修改选择第二个变量alphaj的方法
-def selectJ(i,oS,Ei):
-	maxK=-1;maxDeltaE= 0 ;Ej=0
-	#将误差矩阵每一行第一列置1，以此确定出误差不为0
-	#的样本
-	oS.Cache[i]=[1,Ei]
-	#获取缓存中Ei不为0的样本对应的alpha列表
-	validEcacheList=nonzero(oS.Cache[:,0].A)[0]
-	#在误差不为0的列表中找出使abs(Ei-Ej)最大的alphaj
-	if(len(validEcacheList)>0):
-		for k in validEcacheList:
-			if k ==i:continue
-			Ek=calcEk(oS,k)
-			deltaE=abs(Ei-Ek)
-			if(deltaE>maxDeltaE):
-				maxK=k;maxDeltaE=deltaE;Ej=Ek
-		return maxK,Ej
-	else:
-	#否则，就从样本集中随机选取alphaj
-		j=selectJrand(i,oS.m)
-		Ej=calcEk(oS,j)
-	return j,Ej
-
-#更新误差矩阵
-def updateEk(oS,k):
-	Ek=calcEk(oS,k)
-	oS.Cache[k]=[1,Ek]
-
-def loadDataSet(fName, startLine, endline):
-	dataMat = []
-	labelMat = []
+def loadData(fName, RowStart, RowEnd):
+	'''
+	load data set (training or test) from csv file
+	@param1 : file name
+	@param2 : start line number of csv
+	@param3 : end line number of csv
+	'''
+	x = []
+	y = []
 	fr = open(fName)
-	for line in islice(fr, startLine, endline):
-		lineArr = line.strip().split(',')
-		labelMat.append(int(lineArr[0]))
-		dataLine = []
+	for i in islice(fr, RowStart, RowEnd):
+		data = i.strip().split(',')
+		y.append(int(data[0]))
+		line = []
 		for i in range(1, DIM+1):
-			dataLine.append(float(lineArr[i]))
-		dataMat.append(dataLine)
-	return dataMat, labelMat
+			line.append(float(data[i])/255.0)
+		x.append(line)
+	return x, y
 
-def selectRand(i, m):
-	j = i
-	while(j==i):
-		j = int(random.uniform(0,m))
-	return j
 
-def updateAlpha(alphaJ, upper, lower):
-	if alphaJ > upper: alphaJ = upper
-	if alphaJ < lower: alphaJ = lower
-	return alphaJ
-
-def kernelTrans( X, A, kTup):
+def kernelGauss(X, A, k):
 	'''
-	RBF kernel function
+	RBF kernel function (k = sqrt(2)*sigma)
+	Note : If each K(x1, x2) is calculate separately, the vector operation
+	of the last step cannot be used, and the efficiency is greatly reduced.
+	@param1 : transform matrix
+	@param2 : operation vector
+	@param3 : falling step of gauss function (k = sqrt(2)*sigma)
 	'''
-	m ,n = shape(X)
-	K = mat(zeros((m,1)))
-	if kTup[0] == 'lin': K = X * A.T
-	elif kTup[0] == 'rbf':
-		for j in range(m):
-			deltaRow = X[j,:] - A
-			K[j] = deltaRow * deltaRow.T
-		K = exp(K / (-1 * kTup[1] ** 2))
-	else: raise NameError('huston ---')
+	m,n = shape(X)
+	K = mat(zeros((m, 1))) # kernel function vector
+	for i in range(m):
+		d = X[i,:] - A
+		K[i] = d * d.T
+	K = exp(K / (-1 * k ** 2))
 	return K
 
-def innerL(i, oS):
-	Ei = calcEk(oS, i)
-	if ((oS.labelMat[i]*Ei < -oS.tol) and (oS.alphas[i] < oS.C)) or ((oS.labelMat[i]*Ei > oS.tol) and (oS.alphas[i] > 0)):
-		j,Ej = selectJ(i, oS, Ei) #this has been changed from selectJrand
-		alphaIold = oS.alphas[i].copy(); alphaJold = oS.alphas[j].copy();
-		if (oS.labelMat[i] != oS.labelMat[j]):
-			L = max(0, oS.alphas[j] - oS.alphas[i])
-			H = min(oS.C, oS.C + oS.alphas[j] - oS.alphas[i])
-		else:
-			L = max(0, oS.alphas[j] + oS.alphas[i] - oS.C)
-			H = min(oS.C, oS.alphas[j] + oS.alphas[i])
-		if L==H: print("L==H"); return 0
-		eta = 2.0 * oS.K[i,j] - oS.K[i,i] - oS.K[j,j] #changed for kernel
-		if eta >= 0: print("eta>=0"); return 0
-		oS.alphas[j] -= oS.labelMat[j]*(Ei - Ej)/eta
-		oS.alphas[j] = updateAlpha(oS.alphas[j],H,L)
-		updateEk(oS, j) #added this for the Ecache
-		if (abs(oS.alphas[j] - alphaJold) < 0.00001): print("j not moving enough"); return 0
-		oS.alphas[i] += oS.labelMat[j]*oS.labelMat[i]*(alphaJold - oS.alphas[j])#update i by the same amount as j
-		updateEk(oS, i) #added this for the Ecache                    #the update is in the oppostie direction
-		b1 = oS.b - Ei- oS.labelMat[i]*(oS.alphas[i]-alphaIold)*oS.K[i,i] - oS.labelMat[j]*(oS.alphas[j]-alphaJold)*oS.K[i,j]
-		b2 = oS.b - Ej- oS.labelMat[i]*(oS.alphas[i]-alphaIold)*oS.K[i,j]- oS.labelMat[j]*(oS.alphas[j]-alphaJold)*oS.K[j,j]
-		if (0 < oS.alphas[i]) and (oS.C > oS.alphas[i]): oS.b = b1
-		elif (0 < oS.alphas[j]) and (oS.C > oS.alphas[j]): oS.b = b2
-		else: oS.b = (b1 + b2)/2.0
-		return 1
-	else: return 0
 
-def PlattSMO(dataMatIn, classLabels, C, toler, maxIter, kTup=('lin', 0)): #full Platt SMO
-	oS = optStruct(mat(dataMatIn),mat(classLabels).transpose(),C,toler, kTup)
-	itera = 0
-	entireSet = True; alphaPairsChanged = 0
-	while (itera < maxIter) and ((alphaPairsChanged > 0) or (entireSet)):
-		alphaPairsChanged = 0
-		if entireSet:   #go over all
-			for i in range(oS.m):        
-				alphaPairsChanged += innerL(i,oS)
-				print("fullSet, iter: %d i:%d, pairs changed %d" % (itera,i,alphaPairsChanged))
-			itera += 1
-		else:#go over non-bound (railed) alphas
-			nonBoundIs = nonzero((oS.alphas.A > 0) * (oS.alphas.A < C))[0]
-			for i in nonBoundIs:
-				alphaPairsChanged += innerL(i,oS)
-				print("non-bound, iter: %d i:%d, pairs changed %d" % (itera,i,alphaPairsChanged))
-			itera += 1
-		if entireSet: entireSet = False #toggle entire set loop
-		elif (alphaPairsChanged == 0): entireSet = True  
-		print("iteration number: %d" % itera)
-	return oS.b,oS.alphas
+def getEk(param, k):
+	'''
+	calculate prediction error
+	( Ei = [Sum aj*yj*K(xj,xi)+b)] - yi )
+	@param1 : operation structure
+	@param2 : column number
+	'''
+	Ek = float(multiply(param.a, param.y).T*param.K[:,k] + param.b)
+	Ek -= float(param.y[k]) # 7.105
+	return Ek
 
-def testRbf(k1=1.3):
-	dataArr,labelArr = loadDataSet('16.MNIST.train.csv', 1, NUM+1)
+
+def setEk(param, k):
+	'''
+	update prediction error
+	@param1 : operation structure
+	@param2 : column number
+	'''
+	Ek = getEk(param,k)
+	param.Cache[k] = [1,Ek]
+
+
+def selectJRand(i, m):
+	'''
+	select SMO inner loop alpha's index randomly
+	@param1 : the first alpha's index
+	@param2 : row of matrix
+	'''
+	j = i
+	while(j==i) : j = int(random.uniform(0,m))
+	return j
+
+
+def selectJ(param, i, Ei):
+	'''
+	select SMO inner loop alpha's index
+	@param1 : operation structure
+	@param2 : the first alpha index
+	@param3 : the first alpha's prediction error
+	'''
+	jMax = -1
+	maxDeltaE = 0
+	param.Cache[i]=[1,Ei] # calculate the Ei, so set the Ei flag
+	aValid = nonzero(param.Cache[:,0].A)[0] # get the set  (E!=0)
+	if(len(aValid) > 0): # select alpha j from the set (E!=0)
+		for j in aValid:
+			if j == i : continue
+			Ej = getEk(param,j)
+			deltaE = abs(Ei-Ej)
+			if(deltaE > maxDeltaE):
+				jMax = j
+				maxDeltaE = deltaE
+		return jMax, getEk(param,jMax)
+	else: # select random alpha j
+		j = selectJRand(i,param.m)
+		Ej = getEk(param,j)
+		return j,Ej
+
+
+def setAlpha(ajNewUnc, H, L):
+	'''
+	update alpha j
+	@param1 : alpha j (second alpha) new, unc
+	@param2 : the right or top end of box
+	@param2 : the left or bottom end of box
+	'''
+	if ajNewUnc > H: ajNewUnc = H
+	if ajNewUnc < L: ajNewUnc = L
+	return ajNewUnc
+
+
+def innerL(i, param):
+	'''
+	platt SMO inner loop
+	@param1 : the first alpha index
+	@param2 : operation structure
+	'''
+	L = 0.0
+	H = 0.0
+	Ei = getEk(param, i)
+	if ( (param.y[i] * Ei < -param.t) and (param.a[i] < param.C)) or \
+		((param.y[i] * Ei > param.t) and (param.a[i] > 0) ): # outer loop index is right?
+		j,Ej = selectJ(param, i, Ei)
+		aiOld = param.a[i].copy()
+		ajOld = param.a[j].copy()
+		if (param.y[i] != param.y[j]): # Graph 7.8 left
+			L = max(0, param.a[j] - param.a[i])
+			H = min(param.C, param.C + param.a[j] - param.a[i])
+		else: # Graph 7.8 right
+			L = max(0, param.a[j] + param.a[i] - param.C)
+			H = min(param.C, param.a[j] + param.a[i])
+		if L == H:
+			#print("L == H")
+			return 0 # can not change the alpha pair
+		eta = param.K[i,i] + param.K[j,j] - 2.0 * param.K[i,j] # 7.107
+		if eta <= 0:
+			#print("eta <= 0")
+			return 0
+		param.a[j] += param.y[j] * (Ei - Ej) / eta # 7.106
+		param.a[j] = setAlpha(param.a[j],H,L)
+		setEk(param, j)
+		if (abs(param.a[j] - ajOld) < 0.00001): # the moving of j is too short
+			#print("alphaj isn't moving enough. a%d = %f" % (j, param.a[j]))
+			return 0
+		else : 
+			param.a[i] += param.y[j]*param.y[i]*(ajOld - param.a[j]) # 7.109
+			setEk(param, i)
+			b1 = param.b - Ei - param.y[i]*(param.a[i]-aiOld)*param.K[i,i] - \
+					param.y[j]*(param.a[j]-ajOld)*param.K[i,j] # 7.115
+			b2 = param.b - Ej - param.y[i]*(param.a[i]-aiOld)*param.K[i,j] - \
+					param.y[j]*(param.a[j]-ajOld)*param.K[j,j] # 7.116
+			# update b
+			if (0 < param.a[i]) and (param.a[i] < param.C): param.b = b1
+			elif (0 < param.a[j]) and (param.a[j] < param.C): param.b = b2
+			else: param.b = (b1 + b2) / 2.0
+			#print("alpha pair is updated! i=%d,j=%d,Ei=%f,Ej=%f,ai=%f,aj=%f,L=%f,H=%f" % (i, j, Ei, Ej, param.a[i], param.a[j], L, H))
+			return 1
+	else:
+		#print("the Ei is bigger than tolerance. E%d = %f" % (i, Ei))
+		return 0
+
+
+def PlattSMO(x, y, C, t, maxIter, k=1.3):
+	'''
+	platt SMO main function
+	@param1 : training data
+	@param2 : training data's label
+	@param3 : relaxation variable
+	@param4 : tolerance of Ek
+	@param5 : falling step of gauss function (k = sqrt(2)*sigma)
+	'''
+	param = optStruct(x, y, C, t, k)
+	#print("x =")
+	#print(param.x)
+	#print("K =")
+	#print(param.K)
+	#print("C = %d" % param.C)
+	#print("t = %d" % param.t)
+	#print("m = %d" % param.m)
+	#print("")
+	print ("Data initlization completed. (time : %s)" % time.ctime())
+	cnt = 0
+	cNum = 0 # alpha pair changed number of times
+	isOutside = True
+	while (cnt < maxIter) and ((cNum > 0) or (isOutside)):
+		cNum = 0
+		if isOutside: # the alpha of sample data is out of range (0, C)
+			for i in range(param.m):
+				if (innerL(i,param) == 1):
+					cNum += 1
+					#print("out (0, C), iter: %d i:%d, alpha pairs changed %d times" % (cnt,i,cNum))
+			cnt += 1
+		else: # the alpha of sample data is in range (0, C)
+			insideSet = nonzero((param.a.A > 0) * (param.a.A < C))[0]
+			for i in insideSet:
+				if (innerL(i,param) == 1):
+					cNum += 1
+					#print("in  (0, C), iter: %d i:%d, alpha pairs changed %d times" % (cnt,i,cNum))
+			cnt += 1
+		if isOutside : isOutside = False
+		elif (cNum == 0): isOutside = True
+		print ("Iteration number is %d. (time : %s)" % (cnt, time.ctime()))
+	print(param.a)
+	return param.b, param.a
+
+
+def testRbf(C=0.6, t=0.00001, k=2.3):
+	'''
+	test platt SMO method with gauss kernel
+	'''
+	print ("SVM is starting. Training data number is %d. [C=%.2f, k=%.2f] (time : %s)" % (NUM, C, k, time.ctime()))
+	
+	# load mnist data
+	data,label = loadData('16.MNIST.train.csv', 1, NUM+1)
 	for i in range(0, NUM) :
-		if labelArr[i] == 0 : labelArr[i] = 1
-		else : labelArr[i] = -1
-	b,alphas = PlattSMO(dataArr, labelArr, 1, 0.0001, 100, ('rbf', k1)) #C=200 important
-	datMat=mat(dataArr); labelMat = mat(labelArr).transpose()
-	svInd=nonzero(alphas.A>0)[0]
-	sVs=datMat[svInd] #get matrix of only support vectors
-	labelSV = labelMat[svInd];
-	print("there are %d Support Vectors" % shape(sVs)[0])
-	m,n = shape(datMat)
-	errorCount = 0
+		if label[i] == 0 : label[i] = 1
+		else : label[i] = -1
+	x = mat(data)
+	y = mat(label).transpose()
+	
+	# execute platt SMO method
+	b,a = PlattSMO(x, y, C, t, 1000, k) # C=200 k=1.3 is important!
+	
+	# calculate the error rate of training data
+	sv = nonzero(a.A>0)[0]
+	xSV = x[sv] # get matrix of only support vectors (alpha>0)
+	ySV = y[sv] # get label of only support vectors (alpha>0)
+	print ("There are %d support vectors." % shape(ySV)[0])
+	m,n = shape(x) # this m is number of support vector
+	errCnt = 0
 	for i in range(m):
-		kernelEval = kernelTrans(sVs,datMat[i,:],('rbf', k1))
-		predict=kernelEval.T * multiply(labelSV,alphas[svInd]) + b
-		if sign(predict)!=sign(labelArr[i]): errorCount += 1
-	print("the training error rate is: %f" % (float(errorCount)/m))
-	return
-
-	# test the last 5000 data
-	dataArr,labelArr = loadDataSet('16.MNIST.train.csv', 35001, 40001)
+		kernel  = kernelGauss(xSV, x[i,:], k)
+		predict = kernel.T * multiply(ySV, a[sv]) + b # Accumulation is completed once by matrix operation
+		if sign(predict) != sign(label[i]) : errCnt += 1
+	print ("Training error rate is %.2f%%. (time : %s)" % (float(errCnt)/m*100.0, time.ctime()))
+	
+	# calculate the error rate of test data (last 5000 data of mnist)
+	data,label = loadData('16.MNIST.train.csv', 35001, 40001)
 	for i in range(0, 5000) :
-		if labelArr[i] == 0 : labelArr[i] = 1
-		else : labelArr[i] = -1
-	errorCount = 0
-	datMat=mat(dataArr); labelMat = mat(labelArr).transpose()
-	m,n = shape(datMat)
+		if label[i] == 0 : label[i] = 1
+		else : label[i] = -1
+	errCnt = 0
+	x = mat(data)
+	y = mat(label).transpose()
+	m,n = shape(x)
 	for i in range(m):
-		kernelEval = kernelTrans(sVs,datMat[i,:],('rbf', k1))
-		predict=kernelEval.T * multiply(labelSV,alphas[svInd]) + b
-		if sign(predict)!=sign(labelArr[i]): errorCount += 1    
-	print("the test error rate is: %f" % (float(errorCount)/m)) 
+		kernel  = kernelGauss(xSV, x[i,:], k)
+		predict = kernel.T * multiply(ySV, a[sv]) + b
+		if sign(predict) != sign(label[i]) : errCnt += 1
+	print ("Test error rate is %.2f%%. (time : %s)" % (float(errCnt)/m*100.0, time.ctime()))
+
+
+def twoClassify(target=0, begin=1, C=0.6, t=0.00001, k=2.3):
+	'''
+	make two classfication between "Target" and other's number.
+	@param1 : target digital
+	@param2 : the first row of training data
+	@param3 : relaxation variable
+	@param4 : tolerance of Ex
+	@param5 : falling step of gauss function (k = sqrt(2)*sigma)
+	'''
+	print ("%d classfication's SVM start. Training data number is %d. [C=%.2f, k=%.2f] (time : %s)" % (target, NUM, C, k, time.ctime()))
+	
+	# load mnist data
+	data,label = loadData('16.MNIST.train.csv', begin, NUM+1)
+	for i in range(0, NUM) :
+		if label[i] == target : label[i] = 1
+		else : label[i] = -1
+	x = mat(data)
+	y = mat(label).transpose()
+	
+	# execute platt SMO method
+	b,a = PlattSMO(x, y, C, t, 1000, k) # C=200 k=1.3 is important!
+	
+	# calculate the error rate of test data (last 5000 data of mnist)
+	data,label = loadData('16.MNIST.train.csv', NUM+1, 2*NUM+1)
+	for i in range(0, NUM) :
+		if label[i] == target : label[i] = 1
+		else : label[i] = -1
+	errCnt = 0
+	x = mat(data)
+	y = mat(label).transpose()
+	m,n = shape(x)
+	for i in range(m):
+		kernel  = kernelGauss(xSV, x[i,:], k)
+		predict = kernel.T * multiply(ySV, a[sv]) + b
+		if sign(predict) != sign(label[i]) : errCnt += 1
+	p = 1.0 - float(errCnt) / m * 100.0
+	print ("Confidence rate is %.2f%%. (time : %s)" % (p, time.ctime()))
+
+	return a, x, b, p
+
+
+class supportVector:
+	'''
+	two-classification's support vector infomation  structure
+	'''
+	def __init__(self, a, x, b, p):
+		self.a = a
+		self.x = x
+		self.b = b
+		self.p = p
+
+
+def multiClassify(C=0.6, t=0.00001, k=2.3):
+	'''
+	make ten classfication from '0' to '9'.
+	@param1 : relaxation variable
+	@param2 : tolerance of Ex
+	@param3 : falling step of gauss function (k = sqrt(2)*sigma)
+	'''
+	print ("multi-classfication's SVM start.")
+	sv = {}
+	
+	# make 10 two-classification
+	for i in range(10):
+		sv[i] = supportVector(twoClassify(i, 1, C, t, k))
+
+	return sv
+
+	
+def testTwoClass(C=0.6, t=0.00001, k=2.3):
+	'''
+	test platt SMO method with gauss kernel
+	'''
+	print ("SVM is starting. Training data number is %d. [C=%.2f, k=%.2f] (time : %s)" % (NUM, C, k, time.ctime()))
+	
+	# load mnist data
+	data,label = loadData('16.MNIST.train.csv', 1, NUM+1)
+	for i in range(0, NUM) :
+		if label[i] == 0 : label[i] = 1
+		else : label[i] = -1
+	x = mat(data)
+	y = mat(label).transpose()
+	
+	# execute platt SMO method
+	b,a = PlattSMO(x, y, C, t, 1000, k) # C=200 k=1.3 is important!
+	
+	# calculate the error rate of training data
+	sv = nonzero(a.A>0)[0]
+	xSV = x[sv] # get matrix of only support vectors (alpha>0)
+	ySV = y[sv] # get label of only support vectors (alpha>0)
+	print ("There are %d support vectors." % shape(ySV)[0])
+	m,n = shape(x) # this m is number of support vector
+	errCnt = 0
+	for i in range(m):
+		kernel  = kernelGauss(xSV, x[i,:], k)
+		predict = kernel.T * multiply(ySV, a[sv]) + b # Accumulation is completed once by matrix operation
+		if sign(predict) != sign(label[i]) : errCnt += 1
+	print ("Training error rate is %.2f%%. (time : %s)" % (float(errCnt)/m*100.0, time.ctime()))
+	
+	# calculate the error rate of test data (last 5000 data of mnist)
+	data,label = loadData('16.MNIST.train.csv', 35001, 40001)
+	for i in range(0, 5000) :
+		if label[i] == 0 : label[i] = 1
+		else : label[i] = -1
+	errCnt = 0
+	x = mat(data)
+	y = mat(label).transpose()
+	m,n = shape(x)
+	for i in range(m):
+		kernel  = kernelGauss(xSV, x[i,:], k)
+		predict = kernel.T * multiply(ySV, a[sv]) + b
+		if sign(predict) != sign(label[i]) : errCnt += 1
+	print ("Test error rate is %.2f%%. (time : %s)" % (float(errCnt)/m*100.0, time.ctime()))
+
+
+def testMultiClass(C=0.6, t=0.00001, k=2.3):
+	'''
+	test multi-classification method with gauss kernel
+	'''
+	sv = multiClassify(C, t, k)
+	
+	# calculate the error rate of test data (last 5000 data of mnist)
+	data,label = loadData('16.MNIST.train.csv', 35001, 40001)
+	errCnt = 0
+	x = mat(data)
+	y = mat(label).transpose()
+	m,n = shape(x)
+	for i in range(m):
+		maxP = 0 # init the max confidence rate
+		kind = 0 # init the final class
+		for j in range(10):
+			s = nonzero(sv[j].a.A>0)[0]
+			xSV = x[s] # get matrix of only support vectors (alpha>0)
+			ySV = y[s] # get label of only support vectors (alpha>0)
+			print ("There are %d support vectors." % shape(ySV)[0])
+			errCnt = 0
+			kernel  = kernelGauss(xSV, x[i,:], k)
+			predict = kernel.T * multiply(ySV, sv[j].a[s]) + b # Accumulation is completed once by matrix operation
+			if (sign(predict) and sv[j].p > maxP):
+				maxP = sv[j].p
+				kind = j
+		if kind != label[i] : errCnt += 1
+	print ("Test error rate is %.2f%%. (time : %s)" % (float(errCnt)/m*100.0, time.ctime()))
+
 
 if __name__ == '__main__':
 	testRbf()
-
