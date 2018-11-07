@@ -33,11 +33,10 @@ class supportVector:
 	'''
 	two-classification's support vector information structure
 	'''
-	def __init__(self, xSV, kSV, b, p):
+	def __init__(self, xSV, kSV, b):
 		self.xSV = xSV
 		self.kSV = kSV
 		self.b = b
-		self.p = p
 		
 
 def loadData(fName, RowStart, RowEnd):
@@ -175,9 +174,9 @@ def innerL(i, param):
 		# But random selection must many of iteration.
 		# Why?
 		if param.m <= 2000 :
-			#j = selectJRand(i, param.m) # for test
-			#Ej = getEk(param, j) # for test
-			j,Ej = selectJ(param, i, Ei)
+			j = selectJRand(i, param.m) # for test
+			Ej = getEk(param, j) # for test
+			#j,Ej = selectJ(param, i, Ei)
 		else :
 			j,Ej = selectJ(param, i, Ei)
 		# ##############################################
@@ -240,7 +239,6 @@ def PlattSMO(x, y, C, t, maxIter=100000, k=10.0):
 	#print("t = %d" % param.t)
 	#print("m = %d" % param.m)
 	#print("")
-	#print ("Data initialization completed. (time : %s)" % time.ctime())
 	
 	cnt = 0
 	cNum = 0 # alpha pair changed number of times
@@ -301,31 +299,7 @@ def twoClassify(num=1000, target=0, begin=1, C=100, t=0.00001, k=10.0):
 	kSV = multiply(ySV, aSV)
 	print ("Digit %d have %d support vectors." % (target, shape(ySV)[0]))
 	
-	# calculate the confidence rate by next "num" data
-	data,label = loadData('16.MNIST.train.csv', num+1, 2*num+1)
-	for i in range(0, num) :
-		if label[i] == target : label[i] = 1
-		else : label[i] = -1
-	x = mat(data)
-	y = mat(label).transpose()
-	m = shape(x)[0]
-	errCnt = 0
-	for i in range(m):
-		kernel  = kernelGauss(xSV, x[i,:], k)
-		predict = kernel.T * kSV + b
-		if sign(predict) != sign(label[i]) :
-			#print("[%d] predicted : %f, real label : %d. (NG)" % (num+1+i, predict, label[i]))
-			errCnt += 1
-		#else :
-			#print("[%d] predicted : %f, real label : %d. (OK)" % (num+1+i, predict, label[i]))
-	p = (1.0 - float(errCnt) / m) * 100.0
-	#print(a)
-	#print(x)
-	#print(b)
-	#print(p)
-	print ("Digit %d's confidence rate is %.2f%%. (time : %s)" % (target, p, time.ctime()))
-	
-	return xSV, kSV, b, p
+	return xSV, kSV, b
 
 
 def multiClassify(num=1000, C=100, t=0.00001, k=10.0):
@@ -341,8 +315,8 @@ def multiClassify(num=1000, C=100, t=0.00001, k=10.0):
 	
 	# make 10 two-classification
 	for i in range(10):
-		xSV, kSV, b, p = twoClassify(num, i, 1, C, t, k)
-		sv[i] = supportVector(xSV, kSV, b, p)
+		xSV, kSV, b = twoClassify(num, i, 1, C, t, k)
+		sv[i] = supportVector(xSV, kSV, b)
 	return sv
 
 	
@@ -426,9 +400,9 @@ def testMultiClass(num=1000, C=100, t=0.00001, k=10.0):
 		kind = 0 # initialize the final digit
 		for j in range(10):
 			kernel  = kernelGauss(sv[j].xSV, x[i,:], k)
-			predict = kernel.T * sv[j].kSV + sv[j].b # Accumulation is completed once by matrix operation
-			if (sign(predict) > 0) and (sv[j].p > maxP):
-				maxP = sv[j].p
+			predict = kernel.T * sv[j].kSV + sv[j].b
+			if (sign(predict) > 0) and (predict > maxP):
+				maxP = predict
 				kind = j
 		if kind != label[i] :
 			#print ("[%d] predicted digit = %d, real label %d. (NG)" % (37001+i, kind, label[i]))
@@ -455,9 +429,9 @@ if __name__ == '__main__':
 	print ("--------------------------------------")
 	testTwoClass(num=10000)
 	print ("--------------------------------------")
-	#testTwoClass(num=30000)
+	testTwoClass(num=30000)
 	print ("")
 	# test multi classification
-	print ("--------------------------------------")
-	testMultiClass(num=1000)
-	print ("--------------------------------------")
+	# print ("--------------------------------------")
+	# testMultiClass(num=1000)
+	# print ("--------------------------------------")
