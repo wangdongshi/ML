@@ -173,7 +173,7 @@ def innerL(i, param):
 		# Random selection is better than heuristic selection of j.
 		# But random selection must many of iteration.
 		# Why?
-		if param.m <= 2000 :
+		if param.m <= 50000 :
 			j = selectJRand(i, param.m) # for test
 			Ej = getEk(param, j) # for test
 			#j,Ej = selectJ(param, i, Ei)
@@ -317,6 +317,7 @@ def multiClassify(num=1000, C=100, t=0.00001, k=10.0):
 	for i in range(10):
 		xSV, kSV, b = twoClassify(num, i, 1, C, t, k)
 		sv[i] = supportVector(xSV, kSV, b)
+	print ("Multi-classification constructed. (time : %s)" % time.ctime())
 	return sv
 
 	
@@ -387,21 +388,26 @@ def testMultiClass(num=1000, C=100, t=0.00001, k=10.0):
 	test multi-classification method with gauss kernel
 	'''
 	print ("Test Multi-classification's SVM.")
+	
+	# sv is all of the support vector from digit 0 to digit 9.
+	# In fact, the sv can be seen as this multi-classification.
 	sv = multiClassify(num, C, t, k)
 	
-	# calculate the correct rate of test data (last 5000 data of MNIST)
+	# load test data
 	data,label = loadData('16.MNIST.train.csv', 37001, 42001)
 	x = mat(data)
 	y = mat(label).transpose()
+	
+	# calculate the correct rate of test data (last 5000 data of MNIST)
 	errCnt = 0
 	m = shape(x)[0] # this m is number of test data
 	for i in range(m):
-		maxP = 0 # initialize the max confidence rate
+		maxP = -100000.0 # initialize the max confidence rate
 		kind = 0 # initialize the final digit
 		for j in range(10):
 			kernel  = kernelGauss(sv[j].xSV, x[i,:], k)
 			predict = kernel.T * sv[j].kSV + sv[j].b
-			if (sign(predict) > 0) and (predict > maxP):
+			if predict > maxP:
 				maxP = predict
 				kind = j
 		if kind != label[i] :
@@ -414,24 +420,24 @@ def testMultiClass(num=1000, C=100, t=0.00001, k=10.0):
 
 if __name__ == '__main__':
 	# test two classification
-	print ("--------------------------------------")
-	testTwoClass(num=100)
-	print ("--------------------------------------")
-	testTwoClass(num=200)
-	print ("--------------------------------------")
-	testTwoClass(num=500)
-	print ("--------------------------------------")
-	testTwoClass(num=1000)
-	print ("--------------------------------------")
-	testTwoClass(num=2000)
-	print ("--------------------------------------")
-	testTwoClass(num=5000)
-	print ("--------------------------------------")
-	testTwoClass(num=10000)
-	print ("--------------------------------------")
-	testTwoClass(num=30000)
-	print ("")
+	#print ("--------------------------------------")
+	#testTwoClass(num=100)
+	#print ("--------------------------------------")
+	#testTwoClass(num=200)
+	#print ("--------------------------------------")
+	#testTwoClass(num=500)
+	#print ("--------------------------------------")
+	#testTwoClass(num=1000)
+	#print ("--------------------------------------")
+	#testTwoClass(num=2000)
+	#print ("--------------------------------------")
+	#testTwoClass(num=5000)
+	#print ("--------------------------------------")
+	#testTwoClass(num=10000)
+	#print ("--------------------------------------")
+	#testTwoClass(num=30000)
+	#print ("")
 	# test multi classification
-	# print ("--------------------------------------")
-	# testMultiClass(num=1000)
-	# print ("--------------------------------------")
+	print ("--------------------------------------")
+	testMultiClass(num=2000)
+	print ("--------------------------------------")
