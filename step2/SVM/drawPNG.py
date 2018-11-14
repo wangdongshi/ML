@@ -282,7 +282,7 @@ def twoClassify(num=1000, target=0, begin=1, C=100, t=0.00001, k=10.0):
 	print ("Digit %d's training data number is %d. (time : %s)" % (target, num, time.ctime()))
 	
 	# load MNIST data
-	data,label = loadData('16.MNIST.train.csv', begin, num+1)
+	data,label = loadData('../16.MNIST.train.csv', begin, num+1)
 	for i in range(0, num) :
 		if label[i] == target : label[i] = 1
 		else : label[i] = -1
@@ -324,7 +324,7 @@ def multiClassify(num=1000, C=100, t=0.00001, k=10.0):
 	
 def testDraw(num=1000, C=100, t=0.00001, k=10.0):
 	# load MNIST data
-	data,label = loadData('16.MNIST.train.csv', 1, num+1)
+	data,label = loadData('../16.MNIST.train.csv', 1, num+1)
 	for i in range(0, num) :
 		if label[i] == 0 : label[i] = 1
 		else : label[i] = -1
