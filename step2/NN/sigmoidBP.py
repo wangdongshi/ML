@@ -22,8 +22,6 @@ class Network(object):
 						and 3 neurons in hidden layer, and 2 neurons in 
 						output layer.
 		"""
-		# adapt to softmax transfer to last layer?
-		self.softmax = False
 		# layer number of NN
 		self.num_layers = len(sizes)
 		self.sizes = sizes
@@ -41,12 +39,10 @@ class Network(object):
 		"""
 		for b, w in list(zip(self.biases, self.weights)):
 			a = sigmoid(np.dot(w, a) + b)
-		# set last layer's active function to softmax
-		if self.softmax : a = softmax(a)
 		return a
 
 	def SGD(self, training_data, epochs, mini_batch_size, eta,
-			softmax=False, test_data=None):
+			test_data=None):
 		"""
 		stochastic gradient descent
 		:param training_data	: input training data set
@@ -111,15 +107,11 @@ class Network(object):
 		# save the matrix of neurons' value before sigmoid transfer
 		activations = [x]
 		zs = []
-		size = len(list(zip(self.biases, self.weights)))
-		for i, (b, w) in enumerate(list(zip(self.biases, self.weights))):
-		#for b, w in list(zip(self.biases, self.weights)):
+		for b, w in list(zip(self.biases, self.weights)):
 			z = np.dot(w, activation)+b
 			zs.append(z)
 			activation = sigmoid(z)
-			if self.softmax and i == size - 1 : activation = softmax(activation)
 			activations.append(activation)
-		
 		# get sigma value(after sigmoid transfer)
 		delta = self.cost_derivative(activations[-1], y) * \
 			sigmoid_prime(zs[-1])
@@ -137,13 +129,12 @@ class Network(object):
 
 	def evaluate(self, test_data):
 		# get predicted result
-		#test_results = [(self.feedforward(x), np.argmax(self.feedforward(x)), y)
-		test_results = [(self.feedforward(x), np.argmax(self.feedforward(x)), y)
+		test_results = [(np.argmax(self.feedforward(x)), y)
 						for (x, y) in test_data]
 		#print (test_results)
 
 		# return the number of correctly predict
-		return sum(int(x == y) for (array, x, y) in test_results)
+		return sum(int(x == y) for (x, y) in test_results)
 
 	def cost_derivative(self, output_activations, y):
 		"""
@@ -170,15 +161,6 @@ def sigmoid_prime(z):
 	:return		: sigmoid derivative's value
 	"""
 	return sigmoid(z)*(1-sigmoid(z))
-
-def softmax(z):
-	"""
-	calculate softmax function's value
-	:param z	: input vector
-	:return		: softmax transfer value
-	"""
-	return np.exp(z)/np.sum(np.exp(z))
-
 
 def loadData(fName, RowStart, RowEnd):
 	'''
@@ -231,5 +213,5 @@ if __name__ == '__main__':
 
 	# test NN
 	net = Network([784, 30, 10])
-	net.SGD(training_data, 100, 10, 3.0, test_data = test_data)
+	net.SGD(training_data, 50, 10, 3.0, test_data = test_data)
 	print ("Completed!")
