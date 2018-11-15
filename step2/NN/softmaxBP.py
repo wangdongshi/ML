@@ -14,7 +14,6 @@ import time
 from itertools import islice
 
 DIM = 28*28
-#np.random.seed(1)
 
 def loadData(fName, RowStart, RowEnd):
 	x = []
@@ -28,28 +27,11 @@ def loadData(fName, RowStart, RowEnd):
 			line.append(float(data[i])/255.0)
 		x.append(line)
 	return x, y
-	
-def load_dataset(path):
-	trainFiles, testFiles, x_train, x_test, y_train, y_test = [], [], [], [], [], []
-	for i in range(0, 10):
-		trainFiles.append(listdir(path + "train/" + str(i) + "/"))
-		testFiles.append(listdir(path + "test/" + str(i) + "/"))
-	for i in range(0, 10):
-		for j in range(0, len(trainFiles[i])):
-			x_train.append(im.imread(path + "train/" + str(i) + "/" + trainFiles[i][j]))
-			x_train[-1] = x_train[-1] / 255
-			y_train.append(i)
-		for j in range(0, len(testFiles[i])):
-			x_test.append(im.imread(path + "test/" + str(i) + "/" + testFiles[i][j]))
-			x_test[-1] = x_test[-1] / 255
-			y_test.append(i)
-	return x_train, y_train, x_test, y_test
 
 def shuffle_data(x, y):
 	temp = list(zip(x, y))
 	random.shuffle(temp)
 	return zip(*temp)
-
 
 class Layer:
 	def __init__(self, inputDim, actFunction, n):
@@ -146,8 +128,8 @@ def trainModel(model, trainingData, epochs, learningRate):
 		deltaError = error - previousError
 		previousError = error
 		print("Error:", error)
-		print("Delta Error:", deltaError)
-		print("Time Taken :", str(endTime - startTime))
+		#print("Delta Error:", deltaError)
+		#print("Time Taken :", str(endTime - startTime))
 		print("---------------------------------")
 	print("Training Finished!")
 	return model
@@ -155,9 +137,6 @@ def trainModel(model, trainingData, epochs, learningRate):
 if __name__ == '__main__':
 
 	# Load data
-	#datasetPath = "Dataset/"
-	#train_set_x, train_set_y, test_set_x, test_set_y = load_dataset(datasetPath)
-	
 	train_set_x, train_set_y = loadData('../16.MNIST.train.csv', 1, 5001)
 	test_set_x,  test_set_y  = loadData('../16.MNIST.train.csv', 37001, 42001)
 
@@ -184,19 +163,26 @@ if __name__ == '__main__':
 	testingData  = (x_test, y_test)
 
 	model = initializeModel(1, 784, [10])
-	model = trainModel(model, trainingData, 2500, 0.01)
+	model = trainModel(model, trainingData, 5000, 0.01)
 
 	#pickle.dump(model, open("MNIST_NeuralNetwork.nnt", 'wb')) # Saving the trained model using pickle
 
 	#model = pickle.load(open("MNIST_NeuralNetwork.nnt", 'rb'))
+	print("Test Started!")
 	testingData = (x_test, y_test)
 	tp = np.zeros((10, 1))
 	fn = np.zeros((10, 1))
 	for i in range(0, len(testingData[0])):
-		if forwardPropagation(model, testingData[0][i]).argmax() == testingData[1][i].argmax():
+		yVector = forwardPropagation(model, testingData[0][i])
+		if yVector.argmax() == testingData[1][i].argmax():
+			#print("No.%d is OK. It's label is %d." % (i, testingData[1][i].argmax()))
 			tp[testingData[1][i].argmax()] += 1
 		else:
+			#print("No.%d is NG. It's label is %d." % (i, testingData[1][i].argmax()))
 			fn[testingData[1][i].argmax()] += 1
+		#print("Predication is :")
+		#print(yVector)
 			
 	for i in range(0, 10):
-		print(i, ": Correct:", tp[i], "--- Incorrect:", fn[i], "--- Accuracy:", str((tp[i] * 100) / (tp[i] + fn[i])), "%")
+		print(i, ": OK:", tp[i], "--- NG:", fn[i], "--- Accuracy:", str((tp[i] * 100) / (tp[i] + fn[i])), "%")
+	print("Test Finished!")
