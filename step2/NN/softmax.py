@@ -4,8 +4,8 @@
 # [a]   Lagrange multiplier -- alpha with m column
 #import pdb
 import time
-from random import *
-from numpy import *
+import random
+import numpy as np
 from itertools import islice
 
 # const value
@@ -29,7 +29,7 @@ class Network(object):
 		self.biases = [np.random.randn(y, 1) for y in sizes[1:]]
 		# cerate every weight value of all coefficient (0 - 1)
 		self.weights = [np.random.randn(y, x)
-						for x, y in zip(sizes[:-1], sizes[1:])]
+						for x, y in list(zip(sizes[:-1], sizes[1:]))]
 
 	def feedforward(self, a):
 		"""
@@ -37,7 +37,7 @@ class Network(object):
 		:param a		: input values of neurons
 		:return			: output values of neurons
 		"""
-		for b, w in zip(self.biases, self.weights):
+		for b, w in list(zip(self.biases, self.weights)):
 			a = sigmoid(np.dot(w, a) + b)
 		return a
 
@@ -53,22 +53,22 @@ class Network(object):
 		"""
 		if test_data: n_test = len(test_data)
 		n = len(training_data)
-		for j in xrange(epochs):
+		for j in list(range(epochs)):
 			# make training data set to random set
 			random.shuffle(training_data)
 			# divide training set by minimum sample number
 			mini_batches = [
 				training_data[k:k+mini_batch_size]
-				for k in xrange(0, n, mini_batch_size)]
+				for k in list(range(0, n, mini_batch_size))]
 			for mini_batch in mini_batches:
 				# update w and b by every minimum sample
 				self.update_mini_batch(mini_batch, eta)
 			# print NN's correct rate after every test
 			if test_data:
-				print "Epoch {0}: {1} / {2}".format(
-					j, self.evaluate(test_data), n_test)
+				print ("Epoch {0}: {1} / {2}".format(
+					j, self.evaluate(test_data), n_test))
 			else:
-				print "Epoch {0} complete".format(j)
+				print ("Epoch {0} complete".format(j))
 
 	def update_mini_batch(self, mini_batch, eta):
 		"""
@@ -84,14 +84,14 @@ class Network(object):
 			# y and each input x in the sample
 			delta_nabla_b, delta_nabla_w = self.backprop(x, y)
 			# accumulate storage partial values delta_nabla_b and delta_nabla_w
-			nabla_b = [nb+dnb for nb, dnb in zip(nabla_b, delta_nabla_b)]
-			nabla_w = [nw+dnw for nw, dnw in zip(nabla_w, delta_nabla_w)]
+			nabla_b = [nb+dnb for nb, dnb in list(zip(nabla_b, delta_nabla_b))]
+			nabla_w = [nw+dnw for nw, dnw in list(zip(nabla_w, delta_nabla_w))]
 		# update w and b with the accumulated partial derivatives
 		# Note: divide the length of small sample for eta
 		self.weights = [w-(eta/len(mini_batch))*nw
-						for w, nw in zip(self.weights, nabla_w)]
+						for w, nw in list(zip(self.weights, nabla_w))]
 		self.biases = [b-(eta/len(mini_batch))*nb
-					   for b, nb in zip(self.biases, nabla_b)]
+						for b, nb in list(zip(self.biases, nabla_b))]
 
 	def backprop(self, x, y):
 		"""
@@ -107,7 +107,7 @@ class Network(object):
 		# save the matrix of neurons' value before sigmoid transfer
 		activations = [x]
 		zs = []
-		for b, w in zip(self.biases, self.weights):
+		for b, w in list(zip(self.biases, self.weights)):
 			z = np.dot(w, activation)+b
 			zs.append(z)
 			activation = sigmoid(z)
@@ -118,7 +118,7 @@ class Network(object):
 		nabla_b[-1] = delta
 		# multiply the output value of the previous layer
 		nabla_w[-1] = np.dot(delta, activations[-2].transpose())
-		for l in xrange(2, self.num_layers):
+		for l in list(range(2, self.num_layers)):
 			# update from the last l-th layer
 			z = zs[-l]
 			sp = sigmoid_prime(z)
@@ -131,6 +131,8 @@ class Network(object):
 		# get predicted result
 		test_results = [(np.argmax(self.feedforward(x)), y)
 						for (x, y) in test_data]
+		#print (test_results)
+
 		# return the number of correctly predict
 		return sum(int(x == y) for (x, y) in test_results)
 
@@ -179,10 +181,39 @@ def loadData(fName, RowStart, RowEnd):
 		for i in range(1, DIM+1):
 			line.append(float(data[i])/255.0)
 		x.append(line)
-	return x, y
+	xMat = [np.reshape(s, (784, 1)) for s in x]
+	yMat = [vectorized_result(s) for s in y]
+	return list(zip(xMat, y))
+	#return xMat, yMat
+
+
+def vectorized_result(j):
+	'''
+	transfer y to 10-dimensinal unit vector with a
+	1.0 in the jth position and 0.0 elsewhere.
+	@param1 : y's positon
+	@return1 : 10-dimensinal vector
+	'''
+	e = np.zeros((10, 1))
+	e[j] = 1.0
+	return e
 
 
 if __name__ == '__main__':
 	# test NN and softmax
 	print ("Test NN and softmax regression by MNIST set.")
-	print ()
+
+	# load data
+	training_set = loadData('../16.MNIST.train.csv', 1, 1001)
+	training_data = []
+	for i in range(0,len(training_set)):
+		data = [training_set[i][0], vectorized_result(training_set[i][1])]
+		training_data.append(data)
+	validation_data = loadData('../16.MNIST.train.csv', 10001, 11001)
+	#test_data = loadData('../16.MNIST.train.csv', 37001, 42001)
+	test_data = loadData('../16.MNIST.train.csv', 1, 1001)
+
+	# test NN
+	net = Network([784, 30, 10])
+	net.SGD(training_data, 100, 10, 3.0, test_data = test_data)
+	print ("Completed!")
