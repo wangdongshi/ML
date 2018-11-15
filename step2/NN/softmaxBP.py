@@ -1,8 +1,4 @@
 # https://github.com/murtazakhan28/MNIST-dataset-classification-using-neural-network-in-python-and-numpy
-# For the sake of simplicity, the meaning of variables' names is as follows:
-# [x]   training data -- x with m x n dimension
-# [y]   training data -- y with m column
-# [a]   Lagrange multiplier -- alpha with m column
 
 #import pdb
 #import pickle
@@ -137,7 +133,7 @@ def trainModel(model, trainingData, epochs, learningRate):
 if __name__ == '__main__':
 
 	# Load data
-	train_set_x, train_set_y = loadData('../16.MNIST.train.csv', 1, 5001)
+	train_set_x, train_set_y = loadData('../16.MNIST.train.csv', 1, 10001)
 	test_set_x,  test_set_y  = loadData('../16.MNIST.train.csv', 37001, 42001)
 
 	# Reshaping the 28 x 28 images into vectors of 784 x 1
@@ -163,7 +159,7 @@ if __name__ == '__main__':
 	testingData  = (x_test, y_test)
 
 	model = initializeModel(1, 784, [10])
-	model = trainModel(model, trainingData, 5000, 0.01)
+	model = trainModel(model, trainingData, 1500, 0.01)
 
 	#pickle.dump(model, open("MNIST_NeuralNetwork.nnt", 'wb')) # Saving the trained model using pickle
 
