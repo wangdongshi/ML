@@ -31,8 +31,10 @@ def shuffle_data(x, y):
 
 class Layer:
 	def __init__(self, inputDim, actFunction, n):
-		self.weights = np.random.rand(n, inputDim)
-		self.biases = np.random.rand(n, 1)
+		# take care of the following setting. 
+		# do not set all coefficient to zero.
+		self.weights = np.random.randn(n, inputDim)
+		self.biases = np.random.randn(n, 1)
 		self.gradients = np.random.rand(n, inputDim)
 		self.biasGradients = np.random.rand(n, inputDim)
 		self.neurons = n
@@ -57,12 +59,9 @@ def initializeModel(numberOfLayers, inputDim, neurons):
 def sigmoid(x):
 	temp = np.zeros((len(x), 1))
 	for i in range(0, len(x)): # Avoiding overflow
-		if x[i] > 21:
-			temp[i] = 21
-		elif x[i] < -709:
-			temp[i] = -709
-		else:
-			temp[i] = x[i]
+		if x[i] > 21: temp[i] = 21
+		elif x[i] < -709: temp[i] = -709
+		else: temp[i] = x[i]
 	temp = np.multiply(temp, -1)
 	return np.divide(1, np.add(1, np.exp(temp)))
 
@@ -133,7 +132,7 @@ def trainModel(model, trainingData, epochs, learningRate):
 if __name__ == '__main__':
 
 	# Load data
-	train_set_x, train_set_y = loadData('../16.MNIST.train.csv', 1, 10001)
+	train_set_x, train_set_y = loadData('../16.MNIST.train.csv', 1, 3001)
 	test_set_x,  test_set_y  = loadData('../16.MNIST.train.csv', 37001, 42001)
 
 	# Reshaping the 28 x 28 images into vectors of 784 x 1
@@ -158,8 +157,9 @@ if __name__ == '__main__':
 	trainingData = (x_train, y_train)
 	testingData  = (x_test, y_test)
 
-	model = initializeModel(1, 784, [10])
-	model = trainModel(model, trainingData, 1500, 0.01)
+	model = initializeModel(2, 784, [30, 10])
+	#model = initializeModel(1, 784, [10])
+	model = trainModel(model, trainingData, 2500, 0.1)
 
 	#pickle.dump(model, open("MNIST_NeuralNetwork.nnt", 'wb')) # Saving the trained model using pickle
 

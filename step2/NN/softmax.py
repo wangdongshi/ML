@@ -119,10 +119,15 @@ class Network(object):
 			activation = sigmoid(z)
 			if self.softmax and i == size - 1 : activation = softmax(activation)
 			activations.append(activation)
-		
-		# get sigma value(after sigmoid transfer)
-		delta = self.cost_derivative(activations[-1], y) * \
-			sigmoid_prime(zs[-1])
+		if self.softmax :
+			delta = self.cost_derivative(activations[-1], y)
+		else :
+		##########################################################
+		##   the following process is made by sigmoid
+		##########################################################
+		# get delta value(after sigmoid transfer)
+			delta = self.cost_derivative(activations[-1], y) * \
+				sigmoid_prime(zs[-1])
 		nabla_b[-1] = delta
 		# multiply the output value of the previous layer
 		nabla_w[-1] = np.dot(delta, activations[-2].transpose())
@@ -133,6 +138,8 @@ class Network(object):
 			delta = np.dot(self.weights[-l+1].transpose(), delta) * sp
 			nabla_b[-l] = delta
 			nabla_w[-l] = np.dot(delta, activations[-l-1].transpose())
+		##########################################################
+		
 		return (nabla_b, nabla_w)
 
 	def evaluate(self, test_data):
@@ -145,14 +152,14 @@ class Network(object):
 		# return the number of correctly predict
 		return sum(int(x == y) for (array, x, y) in test_results)
 
-	def cost_derivative(self, output_activations, y):
+	def cost_derivative(self, activations, y):
 		"""
-		loss function
-		:param output_activations	: output activations
-		:param y					: label value
-		:return						: loss value
+		loss function (not only sigmoid but also softmax)
+		:param activations	: output activations
+		:param y			: label value
+		:return				: loss value
 		"""
-		return (output_activations-y)
+		return (activations - y)
 
 #### Utility functions
 def sigmoid(z):
@@ -231,5 +238,5 @@ if __name__ == '__main__':
 
 	# test NN
 	net = Network([784, 30, 10])
-	net.SGD(training_data, 100, 10, 3.0, test_data = test_data)
+	net.SGD(training_data, 100, 10, 0.5, softmax=True, test_data = test_data)
 	print ("Completed!")
