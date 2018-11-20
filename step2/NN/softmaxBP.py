@@ -159,7 +159,7 @@ if __name__ == '__main__':
 
 	model = initializeModel(2, 784, [30, 10])
 	#model = initializeModel(1, 784, [10])
-	model = trainModel(model, trainingData, 2500, 0.1)
+	model = trainModel(model, trainingData, 500, 0.1)
 
 	#pickle.dump(model, open("MNIST_NeuralNetwork.nnt", 'wb')) # Saving the trained model using pickle
 
