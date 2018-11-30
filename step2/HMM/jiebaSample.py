@@ -3,7 +3,7 @@ import jieba
 import jieba.posseg as psg
 
 result = "《水流众生》歌词分词:\n"
-filename = r"../geci.txt"
+filename = r"geci.txt"
  
 with open(filename, 'r') as f:
 	print("《水流众生》歌词分词词性：")
