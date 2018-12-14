@@ -18,9 +18,8 @@ def load_csv(file):
 		#else :
 		#	break
 		#pdb.set_trace()
-		if rows[1] == '1' or rows[2] == '1':
-			print(rows, file = outFile)
-			
+		if (rows[1] == '1' or rows[2] == '1'):
+			print(rows, file=outFile)
 	csvFile.close()
 	outFile.close()
 
