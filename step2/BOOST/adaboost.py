@@ -4,6 +4,7 @@ Adaboost is short for Adaptive Boosting
 @author: Peter
 '''
 from numpy import *
+import pdb
 
 def loadSimpData():
     datMat = matrix([[ 1. ,  2.1],
@@ -86,13 +87,14 @@ def adaBoostTrainDS(dataArr,classLabels,numIt=40):
         errorRate = aggErrors.sum()/m
         print("total error: %f" %errorRate)
         if errorRate == 0.0: break
-    return weakClassArr,aggClassEst
+    return weakClassArr#,aggClassEst
 
 def adaClassify(datToClass,classifierArr):
     dataMatrix = mat(datToClass)#do stuff similar to last aggClassEst in adaBoostTrainDS
     m = shape(dataMatrix)[0]
     aggClassEst = mat(zeros((m,1)))
     for i in range(len(classifierArr)):
+        #pdb.set_trace()
         classEst = stumpClassify(dataMatrix,classifierArr[i]['dim'],\
                                  classifierArr[i]['thresh'],\
                                  classifierArr[i]['ineq'])#call stump classify
