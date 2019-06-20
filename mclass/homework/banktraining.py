@@ -16,10 +16,10 @@ import numpy as np
 import calendar
 import types
 import matplotlib.pyplot as plt
-from xgboost import plot_importance
 
 from sklearn.externals import joblib
 from sklearn.preprocessing import LabelEncoder
+from sklearn.preprocessing import OneHotEncoder
 from sklearn.model_selection import train_test_split
 from sklearn import preprocessing
 from sklearn import metrics
@@ -33,6 +33,7 @@ from sklearn.ensemble import VotingClassifier
 from sklearn.ensemble import AdaBoostClassifier
 from sklearn.ensemble import RandomForestClassifier
 from xgboost import XGBClassifier
+from xgboost import plot_importance
 
 from numpy.core.umath_tests import inner1d
 from imblearn.under_sampling import RandomUnderSampler
@@ -117,8 +118,6 @@ if __name__ == "__main__":
 	y = data.y
 	# 将label "yes"、"no"分别转化成1、0
 	le = LabelEncoder()
-	le1 = LabelEncoder()
-	le2 = LabelEncoder()
 	x.job = le.fit_transform(x.job) # 将job列从名称字符串转化为数值（每个值表示一种Job）
 	x.marital = le.fit_transform(x.marital) # 将marital列从名称字符串转化为数值（同上）
 	x.education = le.fit_transform(x.education) # 将education列从名称字符串转化为数值（同上）
@@ -145,6 +144,9 @@ if __name__ == "__main__":
 	for i in range(0, len(week)) :
 		week[i] = weekDict[week[i]]
 	x.day_of_week = week
+	# 对job、marital、education、poutcome四个特征（1，2，3，12）进行OneHot编码
+	oe = OneHotEncoder(categorical_features = [1,2,3,7,8,12])
+	x = oe.fit_transform(x)
 	#print(x.day_of_week)
 	#print(x.iloc[0:5, 0:9])
 	#print(x)
@@ -155,8 +157,8 @@ if __name__ == "__main__":
 	# 样本分割
 	# 划分训练测试数据集，test_size=0.3表示测试数据：训练数据=3:7
 	# 一开始采用固定分割（shuffle=False），待选定模型后采用随机抽取方式对模型进行多次验证
-	x_ready, x_test, y_ready, y_test = train_test_split(x, y, test_size=0.3, shuffle=True)
-	#x_ready, x_test, y_ready, y_test = train_test_split(x, y, test_size=0.3, random_state=42, shuffle=False)
+	#x_ready, x_test, y_ready, y_test = train_test_split(x, y, test_size=0.3, shuffle=True)
+	x_ready, x_test, y_ready, y_test = train_test_split(x, y, test_size=0.3, shuffle=False)
 
 	# 欠采样、过采样
 	rus = RandomUnderSampler(ratio=0.25, random_state=31, replacement=True) # 采用随机欠采样（under sampling）
@@ -171,7 +173,11 @@ if __name__ == "__main__":
 	pData.T.to_csv("y_sampling.csv")
 
 	# 对训练数据进行归一化
-	x_train = preprocessing.scale(x_train)
+	pData = pd.DataFrame(x_train.toarray())
+	pData.to_csv("x_sampling1.csv")
+	x_train = preprocessing.scale(x_train, with_mean=False)
+	pData = pd.DataFrame(x_train.toarray())
+	pData.to_csv("x_sampling.csv")
 
 	###########################################################################
 	# 训练及测试
@@ -236,7 +242,7 @@ if __name__ == "__main__":
 	
 	# 构建投票器
 	#clf = VotingClassifier(estimators=[("svm",clf1),("xgboost",clf2),("rf",clf3)], voting="hard", weights=[1,1,1])
-	clf = clf2
+	clf = clf1
 
 	# 模型训练
 	#clf1.fit(x_train, y_train)
@@ -249,7 +255,7 @@ if __name__ == "__main__":
 	# 模型导入
 	#clf = joblib.load("knn.m")
 	# 对测试数据进行归一化
-	x_test = preprocessing.scale(x_test)
+	x_test = preprocessing.scale(x_test, with_mean=False)
 	# 模型预测
 	y_pred = clf.predict(x_test)
 	# 将预测结果及原来的样本标注输出成文件
