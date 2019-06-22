@@ -58,7 +58,6 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 
-from numpy.core.umath_tests import inner1d
 from imblearn.under_sampling import RandomUnderSampler
 from imblearn.over_sampling import SMOTE
 
@@ -66,6 +65,7 @@ from sklearn import metrics
 from sklearn import preprocessing
 from sklearn.preprocessing import LabelEncoder
 from sklearn.preprocessing import OneHotEncoder
+from sklearn.compose import ColumnTransformer
 from sklearn.model_selection import train_test_split
 from sklearn.model_selection import GridSearchCV
 from sklearn.externals import joblib
@@ -74,6 +74,7 @@ from sklearn.pipeline import Pipeline
 from sklearn import tree
 from sklearn import neighbors
 from sklearn import svm
+from sklearn.linear_model import LogisticRegression
 from sklearn.neural_network import MLPClassifier
 from sklearn.ensemble import VotingClassifier
 from sklearn.ensemble import AdaBoostClassifier
@@ -128,7 +129,7 @@ class AdaCostClassifier(AdaBoostClassifier):
 
         estimator_weight = (-1. * self.learning_rate
                                 * (((n_classes - 1.) / n_classes) *
-                                   inner1d(y_coding, np.log(y_predict_proba))))
+                                   np.inner1d(y_coding, np.log(y_predict_proba))))
 
         # 样本更新的公式，只需要改写这里
         if not iboost == self.n_estimators - 1:
@@ -204,7 +205,8 @@ def pretreatment(file="./bankTraining.csv", method="train", sampling=False):
 	
 	# 对job、marital、education、poutcome四个特征（1，2，3，10）进行OneHot编码
 	#oe = OneHotEncoder(categorical_features = [1,2,3,7,8,12])
-	oe = OneHotEncoder(categorical_features = [1,2,3,10])
+	oe = OneHotEncoder(categorical_features=[1,2,3,10])
+	#oe = OneHotEncoder(categories="auto")
 	x = oe.fit_transform(x)
 	#print(x.day_of_week)
 	#print(x.iloc[0:5, 0:9])
@@ -213,11 +215,12 @@ def pretreatment(file="./bankTraining.csv", method="train", sampling=False):
 	#print(y)
 
 	###########################################################################
-	# 只用于测试过程的预处理（不需要样本分割）
+	# 只用于测试过程的预处理（不需要进行样本分割）
 	if method == "test" :
 		x_test = preprocessing.scale(x, with_mean=False)
 		y_test = y
 		return x_test, x_test, y_test, y_test
+	# 用于训练及验证过程的预处理（不需要样本分割）
 	elif method == "train" :
 		###########################################################################
 		# 样本分割
@@ -243,11 +246,11 @@ def pretreatment(file="./bankTraining.csv", method="train", sampling=False):
 		###########################################################################
 		# 对数据进行标准化（OneHot编码时不能去均值）
 		#pData = pd.DataFrame(x_train.toarray())
-		#pData.to_csv("before_sampling1.csv")
+		#pData.to_csv("x_before_sampling.csv")
 		x_train = preprocessing.scale(x_train, with_mean=False) # 训练数据正规化
 		x_test  = preprocessing.scale(x_test,  with_mean=False) # 测试数据正规化
-		#pData = pd.DataFrame(x_train.toarray()) # 从稀疏矩阵到DataFrame的变换（因为采用了OneHot码）
-		#pData.to_csv("after_sampling.csv")
+		pData = pd.DataFrame(x_train.toarray()) # 从稀疏矩阵到DataFrame的变换（因为采用了OneHot码）
+		pData.to_csv("x_after_sampling.csv")
 		#pData = pd.DataFrame([y_train], index=["y_train"])
 		#pData.T.to_csv("y_sampling.csv")
 		
@@ -341,10 +344,31 @@ def train(x, y, type=7):
 	clf8 = AdaCostClassifier(n_estimators=100)
 	
 	# 构建投票器
-	clf9 = VotingClassifier(estimators=[("svm",clf3),("xgboost",clf6),("rf",clf7)], voting="hard", weights=[3,4,3])
+	clf9 = VotingClassifier(estimators=[("svm",clf3),("xgboost",clf6),("rf",clf7)], voting="hard", weights=[3,4,3])	
+	
+	# 构建Logistic回归模型
+	clf10 = LogisticRegression(
+			penalty='l2',
+			dual=False,
+			tol=0.0001,
+			C=1.0,
+			fit_intercept=True,
+			intercept_scaling=1, 
+			class_weight={0:1, 1:10},	# "balanced"
+			random_state=None,
+			solver='liblinear',
+			max_iter=100,
+			multi_class='ovr',
+			verbose=0,
+			warm_start=False,
+			n_jobs=1
+			)
+	
+	# 构建朴素贝叶斯模型
+	clf11 = VotingClassifier(estimators=[("svm",clf3),("xgboost",clf6),("rf",clf7)], voting="hard", weights=[3,4,3])
 	
 	# 最终决定采用何种分类器
-	clf_array = [clf1, clf2, clf3, clf4, clf5, clf6, clf7, clf8, clf9]
+	clf_array = [clf1, clf2, clf3, clf4, clf5, clf6, clf7, clf8, clf9, clf10, clf11]
 	clf = clf_array[type-1]
 	
 	# 打印所采用分类器名称
@@ -358,6 +382,8 @@ def train(x, y, type=7):
 	elif clf == clf7 :	print("Use Random Forest Classifier.")
 	elif clf == clf8 :	print("Use AdaCost Classifier.")
 	elif clf == clf9 :	print("Use Voting Classifier.")
+	elif clf == clf10:	print("Use Logistic Regression Classifier.")
+	elif clf == clf11:	print("Use Voting Classifier.")
 	print("----------------------------------------------------------")
 		
 	# 模型训练
@@ -382,9 +408,9 @@ if __name__ == "__main__":
 
 	###########################################################################
 	# 数据加载及预处理
-	print(len(sys.argv))
-	for i in range(len(sys.argv)) :
-		print(sys.argv[i])
+	#print(len(sys.argv))
+	#for i in range(len(sys.argv)) :
+	#	print(sys.argv[i])
 	if len(sys.argv) == 1 :
 		x_train, x_test, y_train, y_test = pretreatment()
 	elif len(sys.argv) == 2 :
