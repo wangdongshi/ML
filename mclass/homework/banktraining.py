@@ -54,6 +54,7 @@
 import sys
 import types
 import calendar
+import scipy
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -82,73 +83,15 @@ from sklearn.ensemble import RandomForestClassifier
 from xgboost import XGBClassifier
 from xgboost import plot_importance
 
-# 网上的一个AdaCost算法实现，python3.5环境运行有误！
-class AdaCostClassifier(AdaBoostClassifier):
-    #  新定义的代价调整函数
-    def _beta(self, y, y_hat):
-        res = []
-        for i in zip(y, y_hat):
-            if i[0] == i[1]:
-                res.append(1)   # 正确分类，系数保持不变，按原来的比例减少
-            elif i[0] == 1 and i[1] == -1:
-                res.append(1.25)  # 在信用卡的情景下，将好人误杀代价应该更大一些，比原来的增加比例要高
-            elif i[0] == -1 and i[1] == 1:
-                res.append(1)  # 将负例误判为正例，代价不变，按原来的比例增加
-            else:
-                print(i[0], i[1])
-        return np.array(res)
-    def _boost_real(self, iboost, X, y, sample_weight, random_state):
-        """Implement a single boost using the SAMME.R real algorithm."""
-        estimator = self._make_estimator(random_state=random_state)
-        estimator.fit(X, y, sample_weight=sample_weight)
-
-        y_predict_proba = estimator.predict_proba(X)
-
-        if iboost == 0:
-            self.classes_ = getattr(estimator, "classes_", None)
-            self.n_classes_ = len(self.classes_)
-
-        y_predict = self.classes_.take(np.argmax(y_predict_proba, axis=1),
-                                       axis=0)
-
-        incorrect = y_predict != y
-
-        estimator_error = np.mean(
-            np.average(incorrect, weights=sample_weight, axis=0))
-
-        if estimator_error <= 0:
-            return sample_weight, 1., 0.
-
-        n_classes = self.n_classes_
-        classes = self.classes_
-        y_codes = np.array([-1. / (n_classes - 1), 1.])
-        y_coding = y_codes.take(classes == y[:, np.newaxis])
-
-        proba = y_predict_proba  # alias for readability
-        proba[proba < np.finfo(proba.dtype).eps] = np.finfo(proba.dtype).eps
-
-        estimator_weight = (-1. * self.learning_rate
-                                * (((n_classes - 1.) / n_classes) *
-                                   np.inner1d(y_coding, np.log(y_predict_proba))))
-
-        # 样本更新的公式，只需要改写这里
-        if not iboost == self.n_estimators - 1:
-            sample_weight *= np.exp(estimator_weight *
-                                    ((sample_weight > 0) |
-                                     (estimator_weight < 0)) *
-                                    self._beta(y, y_predict))  # 在原来的基础上乘以self._beta(y, y_predict)，即代价调整函数
-        return sample_weight, 1., estimator_error
-
 # 数据加载及预处理
 def pretreatment(file="./bankTraining.csv", method="train", sampling=False):
 	###########################################################################
-	# 首先在助教给定数据的基础上，进行数据的预处理：
-	# 1. 删除duration这一列（看数据描述duration与结果的关联性太强）
-	# 2. 后面都是处理unknown项，存在unknown的属性共有6项，分别是：job、marital、education、default、housing、loan。缺失数据（unknown）的处理方式主要有：删除元组、数据补齐、不处理，以下主要采用删除元组的处理方法，理由如下：
-	# 3. 首先看default这一列，unknown项非常多，yes只有一项，考虑完全删除此列（对分类来说几乎没有意义）
-	# 4. 还剩job、marital、education、housing、loan这5列，统计这5项分别为unknown的数据的个数：job(33)、marital(8)、education(144)、housing(100)、loan(100，但与housing的unknown项完全重合)，因此，这些数据总共约有285项，仅占全部3260组数据的8.7%，因此简便起见，考虑全部删除这些数据。
-	# 5. month和day_of_week这两个特征看不出与分类的相关性，这两个特征进行OneHot编码容易淹没其它特征，因此也考虑删除。
-	# 6. 整理完毕的数据有3345组，其中标记为yes的数据有354组，可以看出，这是一个样本不均衡的学习问题，yes:no = 1:9
+	# 在给定数据集的基础上，进行数据的预处理：
+	# 1. 首先处理unknown项，存在unknown的属性共有6项，分别是：job、marital、education、default、housing、loan。缺失数据（unknown）的处理方式主要有：删除元组、数据补齐、不处理，以下主要采用删除元组的处理方法，理由如下：
+	# 2. 首先看default这一列，unknown项非常多，yes只有一项，考虑完全删除此列（对分类来说几乎没有意义）
+	# 3. 还剩job、marital、education、housing、loan这5列，统计这5项分别为unknown的数据的个数：job(33)、marital(8)、education(144)、housing(100)、loan(100，但与housing的unknown项完全重合)，因此，这些数据总共约有285项，仅占全部3260组数据的8.7%，因此简便起见，考虑全部删除这些带有unknown的数据。
+	# 4. 删除duration这一列（与结果的关联性太强？要商榷...）
+	# 5. 整理完毕的数据有3345组，其中标记为yes的数据有354组，可以看出，这是一个样本不均衡的学习问题，yes:no = 1:9
 
 	# 数据加载
 	# 读入csv数据，第一行为列名
@@ -156,7 +99,9 @@ def pretreatment(file="./bankTraining.csv", method="train", sampling=False):
 	
 	# 数据清理
 	# 删除duration/default特征
-	data = data.drop(["duration", "default"], axis=1)
+	data = data.drop(["default"], axis=1)
+	# data = data.drop(["duration"], axis=1) # 删除"duration"这一属性？
+	
 	# 删除job、marital、education、housing、loan这5个特征取值为"unknown"的样本
 	data = data[~data["job"].isin(["unknown"])]
 	data = data[~data["marital"].isin(["unknown"])]
@@ -164,7 +109,7 @@ def pretreatment(file="./bankTraining.csv", method="train", sampling=False):
 	data = data[~data["housing"].isin(["unknown"])]
 	data = data[~data["loan"].isin(["unknown"])]
 	# 删除month/day_of_week特征？（想不出相关性）
-	data = data.drop(["month", "day_of_week"], axis=1)
+	# data = data.drop(["month", "day_of_week"], axis=1)
 	# 生成预处理后的数据
 	data.to_csv("pretreatment.csv") 
 	
@@ -173,7 +118,7 @@ def pretreatment(file="./bankTraining.csv", method="train", sampling=False):
 	# 取列名为"y"的label作为y
 	y = data.y
 	
-	# 特征及标注取值数值化
+	# 标注取值数值化
 	# 有序编码
 	le = LabelEncoder()
 	x.job = le.fit_transform(x.job) # 将job列从名称字符串转化为数值（每个值表示一种Job）
@@ -185,40 +130,45 @@ def pretreatment(file="./bankTraining.csv", method="train", sampling=False):
 	x.poutcome = le.fit_transform(x.poutcome) # 将poutcome列从名称字符串转化为数值（同上）
 	
 	# 建立月份缩写字典，并将month列的月份缩写转化为相应数值
-	# monthDict = {}
-	# month = x["month"].tolist()
-	# dic = dict((v,k) for k,v in enumerate(calendar.month_abbr))
-	# for i, j in dic.items():
-		# monthDict[i.lower()] = j
-	# for i in range(0, len(month)) :
-		# month[i] = monthDict[month[i]]
-	# x.month = month
+	monthDict = {}
+	month = x["month"].tolist()
+	dic = dict((v,k) for k,v in enumerate(calendar.month_abbr))
+	for i, j in dic.items():
+		monthDict[i.lower()] = j
+	for i in range(0, len(month)) :
+		month[i] = monthDict[month[i]]
+	x.month = month
 	# 建立月份缩写字典，并将day_of_week列的星期缩写转化为相应数值
-	# weekDict = {}
-	# week = x["day_of_week"].tolist()
-	# dic = dict((v,k) for k,v in enumerate(calendar.day_abbr))
-	# for i, j in dic.items():
-		# weekDict[i.lower()] = j+1
-	# for i in range(0, len(week)) :
-		# week[i] = weekDict[week[i]]
-	# x.day_of_week = week
+	weekDict = {}
+	week = x["day_of_week"].tolist()
+	dic = dict((v,k) for k,v in enumerate(calendar.day_abbr))
+	for i, j in dic.items():
+		weekDict[i.lower()] = j+1
+	for i in range(0, len(week)) :
+		week[i] = weekDict[week[i]]
+	x.day_of_week = week
 	
-	# 对job、marital、education、poutcome四个特征（1，2，3，10）进行OneHot编码
-	#oe = OneHotEncoder(categorical_features = [1,2,3,7,8,12])
-	oe = OneHotEncoder(categorical_features=[1,2,3,10])
-	#oe = OneHotEncoder(categories="auto")
-	x = oe.fit_transform(x)
+	# 对job、marital、education、month、day_of_week、poutcome六个特征（1，2，3，7，8，13）进行OneHot编码
+	# oe = OneHotEncoder(categorical_features = [1,2,3,7,8,13])
+	# x = oe.fit_transform(x)
+	
 	#print(x.day_of_week)
 	#print(x.iloc[0:5, 0:9])
 	#print(x)
+	
+	# 标注取值数值化
 	y = le.fit_transform(y) # 将y列（Label）从名称字符串转化为数值（同上）
 	#print(y)
 
 	###########################################################################
 	# 只用于测试过程的预处理（不需要进行样本分割）
 	if method == "test" :
-		x_test = preprocessing.scale(x, with_mean=False)
-		y_test = y
+		if x.shape[1] > 21 : # OneHot编码，形成稀疏矩阵
+			x_test = preprocessing.scale(x.astype("float64"), with_mean=False)
+			y_test = y
+		else : # 非OneHot编码，普通矩阵
+			x_test = preprocessing.scale(x.astype("float64"))
+			y_test = y
 		return x_test, x_test, y_test, y_test
 	# 用于训练及验证过程的预处理（不需要样本分割）
 	elif method == "train" :
@@ -226,8 +176,8 @@ def pretreatment(file="./bankTraining.csv", method="train", sampling=False):
 		# 样本分割
 		# 划分训练数据集和测试数据集，test_size=0.3表示测试数据：训练数据=3:7
 		# 一开始采用固定分割（shuffle=False），待选定模型后采用随机抽取方式对模型进行多次验证
-		x_ready, x_test, y_ready, y_test = train_test_split(x, y, test_size=0.3, shuffle=True)
-		#x_ready, x_test, y_ready, y_test = train_test_split(x, y, test_size=0.3, shuffle=False)
+		#x_ready, x_test, y_ready, y_test = train_test_split(x, y, test_size=0.3, shuffle=True)
+		x_ready, x_test, y_ready, y_test = train_test_split(x, y, test_size=0.3, shuffle=False)
 
 		###########################################################################
 		# 样本采样
@@ -244,16 +194,20 @@ def pretreatment(file="./bankTraining.csv", method="train", sampling=False):
 		y_train = y_smote
 
 		###########################################################################
-		# 对数据进行标准化（OneHot编码时不能去均值）
 		#pData = pd.DataFrame(x_train.toarray())
 		#pData.to_csv("x_before_sampling.csv")
-		x_train = preprocessing.scale(x_train, with_mean=False) # 训练数据正规化
-		x_test  = preprocessing.scale(x_test,  with_mean=False) # 测试数据正规化
-		pData = pd.DataFrame(x_train.toarray()) # 从稀疏矩阵到DataFrame的变换（因为采用了OneHot码）
-		pData.to_csv("x_after_sampling.csv")
+		# 对数据进行标准化（OneHot编码时不能去均值）
+		if x_train.shape[1] > 21 : # OneHot编码，形成稀疏矩阵
+			x_train = preprocessing.scale(x_train.astype("float64"), with_mean=False) # 训练数据正规化
+			x_test  = preprocessing.scale(x_test.astype("float64"),  with_mean=False) # 测试数据正规化
+			pData = pd.DataFrame(x_train.toarray()) # 从稀疏矩阵到DataFrame的变换（因为采用了OneHot码）
+		else : # 非OneHot编码，普通矩阵
+			x_train = preprocessing.scale(x_train.astype("float64")) # 训练数据正规化
+			x_test  = preprocessing.scale(x_test.astype("float64")) # 测试数据正规化
+			pData = pd.DataFrame(x_train) # 从矩阵到DataFrame的变换	
+		#pData.to_csv("x_after_sampling.csv")
 		#pData = pd.DataFrame([y_train], index=["y_train"])
 		#pData.T.to_csv("y_sampling.csv")
-		
 		return x_train, x_test, y_train, y_test
 	else :
 		return x, x, y, y
@@ -340,21 +294,19 @@ def train(x, y, type=7):
 			warm_start=False,			# True：重新使用之前的结构去拟合样例并且加入更多的估计器
             random_state=23				# 根据y标签值自动调整权值与输入数据的类频率成反比
 			)
-	# 构建AdaCost模型（类代码有问题）
-	clf8 = AdaCostClassifier(n_estimators=100)
 	
 	# 构建投票器
-	clf9 = VotingClassifier(estimators=[("svm",clf3),("xgboost",clf6),("rf",clf7)], voting="hard", weights=[3,4,3])	
+	clf8 = VotingClassifier(estimators=[("svm",clf3),("xgboost",clf6),("rf",clf7)], voting="hard", weights=[3,4,3])	
 	
 	# 构建Logistic回归模型
-	clf10 = LogisticRegression(
+	clf9 = LogisticRegression(
 			penalty='l2',
 			dual=False,
 			tol=0.0001,
 			C=1.0,
 			fit_intercept=True,
 			intercept_scaling=1, 
-			class_weight={0:1, 1:10},	# "balanced"
+			class_weight="balanced",	# {0:1, 1:2}
 			random_state=None,
 			solver='liblinear',
 			max_iter=100,
@@ -364,15 +316,11 @@ def train(x, y, type=7):
 			n_jobs=1
 			)
 	
-	# 构建朴素贝叶斯模型
-	clf11 = VotingClassifier(estimators=[("svm",clf3),("xgboost",clf6),("rf",clf7)], voting="hard", weights=[3,4,3])
-	
 	# 最终决定采用何种分类器
-	clf_array = [clf1, clf2, clf3, clf4, clf5, clf6, clf7, clf8, clf9, clf10, clf11]
+	clf_array = [clf1, clf2, clf3, clf4, clf5, clf6, clf7, clf8, clf9]
 	clf = clf_array[type-1]
 	
 	# 打印所采用分类器名称
-	print("----------------------------------------------------------")
 	if clf == clf1 : 	print("Use DecisionTree Classifier.")
 	elif clf == clf2 :	print("Use K Neighbors Classifier.")
 	elif clf == clf3 :	print("Use SVM Classifier.")
@@ -380,11 +328,8 @@ def train(x, y, type=7):
 	elif clf == clf5 :	print("Use AdaBoost Classifier.")
 	elif clf == clf6 :	print("Use XGBoost Classifier.")
 	elif clf == clf7 :	print("Use Random Forest Classifier.")
-	elif clf == clf8 :	print("Use AdaCost Classifier.")
-	elif clf == clf9 :	print("Use Voting Classifier.")
-	elif clf == clf10:	print("Use Logistic Regression Classifier.")
-	elif clf == clf11:	print("Use Voting Classifier.")
-	print("----------------------------------------------------------")
+	elif clf == clf8 :	print("Use Voting Classifier.")
+	elif clf == clf9:	print("Use Logistic Regression Classifier.")
 		
 	# 模型训练
 	clf.fit(x, y)
@@ -430,11 +375,12 @@ if __name__ == "__main__":
 	# Type5	： AdaBoost
 	# Type6	： XGBoost
 	# Type7	： Random Forest
-	# Type8	： AdaCost
-	# Type9	： Voting
+	# Type8	： Voting
+	# Type9	： Logistic Regression
 	if (len(sys.argv) >= 3) and (sys.argv[2] == "test") :
 		clf = joblib.load("model.m") # 模型加载
 	else :
+		print("----------------------------------------------------------")
 		if len(sys.argv) == 4 :
 			clf = train(x_train, y_train, int(sys.argv[3])) # 构建模型
 		else :
@@ -462,8 +408,9 @@ if __name__ == "__main__":
 	# F1值是Precision和Recall的加权调和平均值，当F1较高时则比较说明模型比较理想
 	# AUC是ROC曲线下面积，正常情况AUC应大于0.5
 	# AUC大于0.8：分类非常准确；AUC在0.6～0.8间：有优化空间；AUC小于0.6：效果较差
-	target_names = ["no", "yes"]
-	print (metrics.classification_report(y_test, y_pred, target_names=target_names))
+	print("----------------------------------------------------------")
+	target = ["no", "yes"]
+	print (metrics.classification_report(y_test, y_pred, target_names=target))
 	print("----------------------------------------------------------")
 	print ("Positive case discriminant evaluation result :")
 	print ("accuracy")
